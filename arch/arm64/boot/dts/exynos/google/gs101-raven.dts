@@ -13,6 +13,13 @@
 / {
 	model = "Raven";
 	compatible = "google,gs101-raven", "google,gs101";
+
+	battery: battery {
+		compatible = "simple-battery";
+
+		charge-full-design-microamp-hours = <4904000>;
+		charge-term-current-microamp = <49000>;
+	};
 };
 
 &cont_splash_mem {
@@ -26,4 +33,8 @@
 	stride = <(1440 * 4)>;
 	format = "a8r8g8b8";
 	status = "okay";
+};
+
+&fuel_gauge {
+	monitored-battery = <&battery>;
 };

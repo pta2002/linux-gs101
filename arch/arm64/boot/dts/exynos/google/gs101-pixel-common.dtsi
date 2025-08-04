@@ -11,6 +11,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/regulator/samsung,s2mpg10-regulator.h>
+#include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/usb/pd.h>
 #include "gs101-pinctrl.h"
 #include "gs101.dtsi"
@@ -588,6 +589,16 @@
 	eeprom: eeprom@50 {
 		compatible = "atmel,24c08";
 		reg = <0x50>;
+
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			fg_state: fgstate@42 {
+				reg = <0x42 0x17>;
+			};
+		};
 	};
 };
 
@@ -738,6 +749,18 @@
 			};
 		};
 	};
+
+	fuel_gauge: fuel-gauge@36 {
+		compatible = "maxim,max77759-fg";
+		reg = <0x36>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&if_pmic_fg_int>;
+		interrupt-parent = <&gpa9>;
+		interrupts = <3 IRQ_TYPE_LEVEL_LOW>;
+		shunt-resistor-micro-ohms = <5000>;
+		nvmem-cell-names = "fg_state";
+		nvmem-cells = <&fg_state>;
+	};
 };
 
 &pinctrl_far_alive {
@@ -781,6 +804,13 @@
 		samsung,pins = "gpa0-7";
 		samsung,pin-function = <GS101_PIN_FUNC_EINT>;
 		samsung,pin-pud = <GS101_PIN_PULL_NONE>;
+	};
+
+	if_pmic_fg_int: if-pmic-fg-int-pins {
+		samsung,pins = "gpa9-3";
+		samsung,pin-function = <GS101_PIN_FUNC_EINT>;
+		samsung,pin-pud = <GS101_PIN_PULL_UP>;
+		samsung,pin-drv = <GS101_PIN_DRV_2_5_MA>;
 	};
 
 	key_power: key-power-pins {

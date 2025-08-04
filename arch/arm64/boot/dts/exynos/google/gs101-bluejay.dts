@@ -12,6 +12,13 @@
 / {
 	model = "Bluejay";
 	compatible = "google,gs101-bluejay", "google,gs101";
+
+	battery: battery {
+		compatible = "simple-battery";
+
+		charge-full-design-microamp-hours = <4450000>;
+		charge-term-current-microamp = <43000>;
+	};
 };
 
 &cont_splash_mem {
@@ -35,4 +42,8 @@
 
 	fts,x-max = <1080>;
 	fts,y-max = <2400>;
+};
+
+&fuel_gauge {
+	monitored-battery = <&battery>;
 };
