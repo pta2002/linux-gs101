@@ -52,6 +52,12 @@ enum power_supply_charge_type {
 	POWER_SUPPLY_CHARGE_TYPE_CUSTOM,	/* use CHARGE_CONTROL_* props */
 	POWER_SUPPLY_CHARGE_TYPE_LONGLIFE,	/* slow speed, longer life */
 	POWER_SUPPLY_CHARGE_TYPE_BYPASS,	/* bypassing the charger */
+
+	/*
+	 * force to 50 to minimize the chances of userspace binary
+	 * incompatibility on newer upstream kernels
+	 */
+	POWER_SUPPLY_CHARGE_TYPE_TAPER_EXT = 50,	/* charging in CV phase */
 };
 
 enum {
