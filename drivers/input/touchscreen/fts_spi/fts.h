@@ -38,6 +38,8 @@
 #include "fts_lib/ftsSoftware.h"
 #include "fts_lib/ftsHardware.h"
 #include <linux/completion.h>
+#include <linux/gpio/consumer.h>
+#include <linux/input/touchscreen.h>
 #include <linux/power_supply.h>
 #include <linux/pm_qos.h>
 #include <linux/sched.h>
@@ -167,21 +169,13 @@ struct fts_config_info {
 
 struct fts_hw_platform_data {
 	int (*power)(bool on);
-	int irq_gpio;
-	int reset_gpio;
-	int avdd_gpio;
-	unsigned long irq_flags;
 	unsigned int x_max;
 	unsigned int y_max;
-	const char *vdd_reg_name;
-	const char *avdd_reg_name;
 	const char *default_fw_name;
 	size_t config_array_size;
 	struct fts_config_info *config_array;
 	int current_index;
 	unsigned long keystates;
-	bool swap_x;
-	bool swap_y;
 	u32 support_super_resolution;
 	bool support_vsync_mode;
 };
@@ -292,6 +286,8 @@ struct fts_ts_info {
 	unsigned long touch_id;
 	unsigned long temp_touch_id;
 	struct fts_hw_platform_data *board;
+	struct touchscreen_properties props;
+	struct gpio_desc *reset_gpiod;
 	struct regulator *vdd_reg;
 	struct regulator *avdd_reg;
 
@@ -342,7 +338,6 @@ struct fts_ts_info {
 	int last_y[TOUCH_ID_MAX];
 	struct work_struct switch_mode_work;
 	bool probe_ok;
-	bool gpio_has_request;
 };
 
 extern int fts_chip_powercycle(struct fts_ts_info *info);

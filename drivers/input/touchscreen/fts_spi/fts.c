@@ -34,6 +34,7 @@
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
+#include <linux/input/touchscreen.h>
 #include <linux/interrupt.h>
 #include <linux/hrtimer.h>
 #include <linux/delay.h>
@@ -2394,10 +2395,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info,
 
 	if (y >= info->board->y_max)
 		y = info->board->y_max;
-	if (info->board->swap_x)
-		x = info->board->x_max - x;
-	if (info->board->swap_y)
-		y = info->board->y_max - y;
+
 	input_mt_slot(info->input_dev, touchId);
 	switch (touchType) {
 	case TOUCH_TYPE_FINGER:
@@ -2439,8 +2437,7 @@ static void fts_enter_pointer_event_handler(struct fts_ts_info *info,
 	if (touch_condition)
 		input_report_key(info->input_dev, BTN_TOOL_FINGER, 1);
 
-	input_report_abs(info->input_dev, ABS_MT_POSITION_X, x);
-	input_report_abs(info->input_dev, ABS_MT_POSITION_Y, y);
+	touchscreen_report_pos(info->input_dev, &info->props, x, y, true);
 	if ((info->last_x[touchId] != x) || (info->last_y[touchId] != y)) {
 		input_report_abs(info->input_dev, ABS_MT_TOUCH_MAJOR,
 				 major * 16);
@@ -3338,8 +3335,7 @@ static int fts_interrupt_install(struct fts_ts_info *info)
 	error = fts_disableInterrupt();
 	logError(1, "%s Interrupt Mode\n", tag);
 	if (request_threaded_irq(info->client->irq, NULL, fts_event_handler,
-				 info->board->irq_flags, FTS_TS_DRV_NAME,
-				 info)) {
+				 IRQF_ONESHOT, FTS_TS_DRV_NAME, info)) {
 		logError(1, "%s Request irq failed\n", tag);
 		kfree(info->event_dispatch_table);
 		error = -EBUSY;
@@ -3507,6 +3503,18 @@ static int fts_init(struct fts_ts_info *info)
 	return error;
 }
 
+static void fts_assert_reset(struct fts_ts_info *info)
+{
+	if (info->reset_gpiod)
+		gpiod_set_value_cansleep(info->reset_gpiod, 1);
+}
+
+static void fts_deassert_reset(struct fts_ts_info *info)
+{
+	if (info->reset_gpiod)
+		gpiod_set_value_cansleep(info->reset_gpiod, 0);
+}
+
 /**
 * Execute a power cycle in the IC, toggling the power lines (AVDD and DVDD)
 * @param info pointer to fts_ts_info struct which contain information of the regulators
@@ -3537,12 +3545,8 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 		}
 	}
 
-	if (info->board->avdd_gpio) {
-		gpio_direction_output(info->board->avdd_gpio, 0);
-	}
-
-	if (info->board->reset_gpio != GPIO_NOT_DEFINED)
-		gpio_set_value(info->board->reset_gpio, 0);
+	if (info->reset_gpiod)
+		fts_assert_reset(info);
 	else
 		mdelay(300);
 
@@ -3564,15 +3568,11 @@ int fts_chip_powercycle(struct fts_ts_info *info)
 		}
 	}
 
-	if (info->board->avdd_gpio) {
-		gpio_direction_output(info->board->avdd_gpio, 1);
-	}
-
 	mdelay(6);
 
-	if (info->board->reset_gpio != GPIO_NOT_DEFINED) {
+	if (info->reset_gpiod) {
 		mdelay(10);
-		gpio_set_value(info->board->reset_gpio, 1);
+		fts_deassert_reset(info);
 	}
 
 	release_all_touches(info);
@@ -3753,32 +3753,28 @@ static void fts_suspend_work(struct work_struct *work)
 static int fts_get_reg(struct fts_ts_info *info, bool get)
 {
 	int retval;
-	const struct fts_hw_platform_data *bdata = info->board;
 
 	if (!get) {
 		retval = 0;
 		goto regulator_put;
 	}
 
-	if ((bdata->vdd_reg_name != NULL) && (*bdata->vdd_reg_name != 0)) {
-		info->vdd_reg = regulator_get(info->dev, bdata->vdd_reg_name);
-		if (IS_ERR(info->vdd_reg)) {
-			logError(1, "%s %s: Failed to get pullup regulator\n",
-				 tag, __func__);
-			retval = PTR_ERR(info->vdd_reg);
-			goto regulator_put;
-		}
+	info->vdd_reg = regulator_get(info->dev, "vdd");
+	if (IS_ERR(info->vdd_reg)) {
+		logError(1, "%s %s: Failed to get vdd regulator\n", tag,
+			 __func__);
+		retval = PTR_ERR(info->vdd_reg);
+		info->vdd_reg = NULL;
+		goto regulator_put;
 	}
 
-	if ((bdata->avdd_reg_name != NULL) && (*bdata->avdd_reg_name != 0)) {
-		info->avdd_reg = regulator_get(info->dev, bdata->avdd_reg_name);
-		if (IS_ERR(info->avdd_reg)) {
-			logError(1,
-				 "%s %s: Failed to get bus power regulator\n",
-				 tag, __func__);
-			retval = PTR_ERR(info->avdd_reg);
-			goto regulator_put;
-		}
+	info->avdd_reg = regulator_get(info->dev, "avdd");
+	if (IS_ERR(info->avdd_reg)) {
+		logError(1, "%s %s: Failed to get avdd regulator\n", tag,
+			 __func__);
+		retval = PTR_ERR(info->avdd_reg);
+		info->avdd_reg = NULL;
+		goto regulator_put;
 	}
 	return OK;
 
@@ -3829,17 +3825,11 @@ static int fts_enable_reg(struct fts_ts_info *info, bool enable)
 		}
 	}
 
-	if (info->board->avdd_gpio) {
-		gpio_direction_output(info->board->avdd_gpio, 1);
-	}
-
 	return OK;
 
 disable_pwr_reg:
 	if (info->avdd_reg)
 		regulator_disable(info->avdd_reg);
-	if (info->board->avdd_gpio)
-		gpio_direction_output(info->board->avdd_gpio, 0);
 
 disable_bus_reg:
 	if (info->vdd_reg)
@@ -3850,81 +3840,23 @@ exit:
 }
 
 /**
- * Configure a GPIO according to the parameters
- * @param gpio gpio number
- * @param config if true, the gpio is set up otherwise it is free
- * @param dir direction of the gpio, 0 = in, 1 = out
- * @param state initial value (if the direction is in, this parameter is ignored)
- * return error code
+ * Acquire the reset GPIO using standard binding (reset-gpios).
+ * The GPIO is acquired in asserted state (reset active).
  */
-static int fts_gpio_setup(int gpio, bool config, int dir, int state)
+static int fts_get_reset_gpio(struct fts_ts_info *info)
 {
-	int retval = 0;
-	unsigned char buf[16];
-
-	if (config) {
-		if (!fts_info->gpio_has_request) {
-			snprintf(buf, 16, "fts_gpio_%u\n", gpio);
-			retval = gpio_request(gpio, buf);
-			if (retval) {
-				logError(
-					1,
-					"%s %s: Failed to get gpio %d (code: %d)",
-					tag, __func__, gpio, retval);
-				return retval;
-			}
-		}
-
-		if (dir == 0)
-			retval = gpio_direction_input(gpio);
-		else
-			retval = gpio_direction_output(gpio, state);
-		if (retval) {
-			logError(1, "%s %s: Failed to set gpio %d direction",
-				 tag, __func__, gpio);
-			return retval;
-		}
-	} else {
-		gpio_free(gpio);
+	info->reset_gpiod =
+		devm_gpiod_get_optional(info->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(info->reset_gpiod)) {
+		logError(1, "%s %s: Failed to get reset GPIO: %ld\n", tag,
+			 __func__, PTR_ERR(info->reset_gpiod));
+		return PTR_ERR(info->reset_gpiod);
 	}
 
-	return retval;
-}
-
-/**
- * Setup the IRQ and RESET (if present) gpios.
- * If the Reset Gpio is present it will perform a cycle HIGH-LOW-HIGH in order to assure that the IC has been reset properly
- */
-static int fts_set_gpio(struct fts_ts_info *info, bool alway_output_low)
-{
-	int retval;
-	struct fts_hw_platform_data *bdata = info->board;
-
-	retval = fts_gpio_setup(bdata->irq_gpio, true, alway_output_low ? 1 : 0,
-				0);
-	if (retval < 0) {
-		logError(1, "%s %s: Failed to configure irq GPIO\n", tag,
+	if (info->reset_gpiod)
+		logError(0, "%s %s: Reset GPIO acquired (asserted)\n", tag,
 			 __func__);
-		goto err_gpio_irq;
-	}
-
-	if (bdata->reset_gpio >= 0) {
-		retval = fts_gpio_setup(bdata->reset_gpio, true, 1,
-					alway_output_low ? 0 : 1);
-		if (retval < 0) {
-			logError(1, "%s %s: Failed to configure reset GPIO\n",
-				 tag, __func__);
-			goto err_gpio_reset;
-		}
-	}
-	info->gpio_has_request = true;
 	return OK;
-
-err_gpio_reset:
-	fts_gpio_setup(bdata->irq_gpio, false, 0, 0);
-	bdata->reset_gpio = GPIO_NOT_DEFINED;
-err_gpio_irq:
-	return retval;
 }
 
 static int fts_pinctrl_init(struct fts_ts_info *info)
@@ -3969,77 +3901,34 @@ err_pinctrl_get:
 
 /**
  * Retrieve and parse the hw information from the device tree node defined in the system.
- * the most important information to obtain are: IRQ and RESET gpio numbers, power regulator names
- * In the device file node is possible to define additional optional information that can be parsed here.
+ * Standard touchscreen properties (touchscreen-size-x/y, touchscreen-inverted-x/y)
+ * are parsed later via touchscreen_parse_properties() in probe.
+ * GPIO and interrupt setup uses standard bindings (interrupts-extended, reset-gpios).
+ * Regulator supply names are hardcoded ("vdd", "avdd").
  */
 static int parse_dt(struct device *dev, struct fts_hw_platform_data *bdata)
 {
 	int retval;
-	const char *name;
 	struct device_node *temp, *np = dev->of_node;
 	struct fts_config_info *config_info;
 	u32 temp_val;
 
-	bdata->irq_gpio = of_get_named_gpio(np, "fts,irq-gpio", 0);
-
-	logError(0, "%s irq_gpio = %d\n", tag, bdata->irq_gpio);
-	retval = of_property_read_string(np, "fts,pwr-reg-name", &name);
-	if (retval == -EINVAL)
-		bdata->avdd_reg_name = NULL;
-	else if (retval < 0)
-		return retval;
-	else {
-		bdata->avdd_reg_name = name;
-		logError(0, "%s pwr_reg_name = %s\n", tag, name);
-	}
-
-	retval = of_property_read_string(np, "fts,bus-reg-name", &name);
-	if (retval == -EINVAL)
-		bdata->vdd_reg_name = NULL;
-	else if (retval < 0)
-		return retval;
-	else {
-		bdata->vdd_reg_name = name;
-		logError(0, "%s bus_reg_name = %s\n", tag, name);
-	}
-
-	retval = of_get_named_gpio(np, "fts,avdd-gpio", 0);
-	if (retval < 0) {
-		logError(0,"%s can't find avdd-gpio[%d]\n", tag, retval);
-		bdata->avdd_gpio = 0;
-	} else {
-		logError(0,"%s get avdd-gpio[%d] from dt\n", tag, retval);
-		bdata->avdd_gpio = retval;
-	}
-
-	if (of_property_read_bool(np, "fts,reset-gpio-enable")) {
-		bdata->reset_gpio =
-			of_get_named_gpio(np, "fts,reset-gpio", 0);
-		logError(0, "%s reset_gpio =%d\n", tag, bdata->reset_gpio);
-	} else {
-		bdata->reset_gpio = GPIO_NOT_DEFINED;
-	}
-
-	retval = of_property_read_u32(np, "fts,irq-flags", &temp_val);
-	if (retval < 0)
-		return retval;
-	else
-		bdata->irq_flags = temp_val;
-	retval = of_property_read_u32(np, "fts,x-max", &temp_val);
+	/* Screen dimensions from standard touchscreen properties */
+	retval = of_property_read_u32(np, "touchscreen-size-x", &temp_val);
 	if (retval < 0)
 		bdata->x_max = X_AXIS_MAX;
 	else
 		bdata->x_max = temp_val;
 
-	retval = of_property_read_u32(np, "fts,y-max", &temp_val);
+	retval = of_property_read_u32(np, "touchscreen-size-y", &temp_val);
 	if (retval < 0)
 		bdata->y_max = Y_AXIS_MAX;
 	else
 		bdata->y_max = temp_val;
-	retval = of_property_read_string(np, "fts,default-fw-name",
-					 &bdata->default_fw_name);
-	bdata->swap_x = of_property_read_bool(np, "fts,swap-x");
-	bdata->swap_y = of_property_read_bool(np, "fts,swap-y");
+
+	of_property_read_string(np, "fts,default-fw-name",
+				&bdata->default_fw_name);
+
 	bdata->support_vsync_mode =
 		of_property_read_bool(np, "fts,support-vsync-mode");
 
@@ -4721,11 +4610,10 @@ static int fts_probe(struct spi_device *client)
 		}
 		parse_dt(&client->dev, info->board);
 	}
-	logError(0, "%s SET GPIOS: \n", tag);
-	info->gpio_has_request = false;
-	retval = fts_set_gpio(info, true);
+	logError(0, "%s SET Reset GPIO: \n", tag);
+	retval = fts_get_reset_gpio(info);
 	if (retval < 0) {
-		logError(1, "%s %s: ERROR Failed to set up GPIO's\n", tag,
+		logError(1, "%s %s: ERROR Failed to get reset GPIO\n", tag,
 			 __func__);
 		error = retval;
 		goto ProbeErrorExit_1;
@@ -4765,17 +4653,9 @@ static int fts_probe(struct spi_device *client)
 	}
 
 	mdelay(3);
-	retval = fts_set_gpio(info, false);
-	if (retval < 0) {
-		logError(1, "%s %s: ERROR Failed to set up GPIO's\n", tag,
-			 __func__);
-		error = retval;
-		goto ProbeErrorExit_3_1;
-	}
+	fts_deassert_reset(info);
 
-	info->client->irq = gpio_to_irq(info->board->irq_gpio);
-	logError(1, "%s gpio_num:%d, irq:%d\n", tag, info->board->irq_gpio,
-		 info->client->irq);
+	logError(1, "%s irq:%d\n", tag, info->client->irq);
 
 	logError(0, "%s SET Event Handler: \n", tag);
 
@@ -4835,6 +4715,13 @@ static int fts_probe(struct spi_device *client)
 			     info->board->x_max - 1, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_POSITION_Y, Y_AXIS_MIN,
 			     info->board->y_max - 1, 0, 0);
+
+	/* Parse standard touchscreen DT properties (touchscreen-size-x/y,
+	 * touchscreen-inverted-x/y, touchscreen-swapped-x-y).
+	 * This overrides the absinfo defaults set above with DT values
+	 * and populates info->props for touchscreen_report_pos(). */
+	touchscreen_parse_properties(info->input_dev, true, &info->props);
+
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MAJOR, AREA_MIN,
 			     info->board->x_max, 0, 0);
 	input_set_abs_params(info->input_dev, ABS_MT_TOUCH_MINOR, AREA_MIN,
@@ -5062,10 +4949,6 @@ ProbeErrorExit_5:
 	destroy_workqueue(info->event_wq);
 
 ProbeErrorExit_4:
-	fts_gpio_setup(info->board->irq_gpio, false, 0, 0);
-	fts_gpio_setup(info->board->reset_gpio, false, 0, 0);
-
-ProbeErrorExit_3_1:
 	fts_enable_reg(info, false);
 
 ProbeErrorExit_3:
@@ -5074,11 +4957,6 @@ ProbeErrorExit_3:
 ProbeErrorExit_2:
 	if (info->ts_pinctrl)
 		devm_pinctrl_put(info->ts_pinctrl);
-	if (info->gpio_has_request) {
-		fts_gpio_setup(info->board->irq_gpio, false, 0, 0);
-		if (info->board->reset_gpio >= 0)
-			fts_gpio_setup(info->board->reset_gpio, false, 0, 0);
-	}
 
 ProbeErrorExit_1:
 	kfree(info);
@@ -5135,8 +5013,6 @@ static void fts_remove(struct spi_device *client)
 
 	fts_enable_reg(info, false);
 	fts_get_reg(info, false);
-	fts_gpio_setup(info->board->irq_gpio, false, 0, 0);
-	fts_gpio_setup(info->board->reset_gpio, false, 0, 0);
 	fts_info = NULL;
 #ifdef CONFIG_SECURE_TOUCH
 	fts_secure_remove(info);
