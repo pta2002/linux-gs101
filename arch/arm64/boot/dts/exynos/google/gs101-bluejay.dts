@@ -29,10 +29,9 @@
 
 &spitouch {
 	st,dchip_id = /bits/ 8 <0x36 0x48>;
-	st,max-coords = <1079 2399>;
 	st,udfps-coords = <540 1717>;
 	st,touch_offload_id = /bits/ 8 <'0' '0' 'b' '3'>;
 
-	fts,x-max = <1080>;
-	fts,y-max = <2400>;
+	touchscreen-size-x = <1080>;
+	touchscreen-size-y = <2400>;
 };
