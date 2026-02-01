@@ -23,6 +23,7 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <linux/gpio/consumer.h>
+#include <linux/crc8.h>
 #include "ftsCompensation.h"
 #include "ftsCore.h"
 #include "ftsError.h"
@@ -38,7 +39,11 @@ extern struct fts_ts_info *fts_info;
 SysInfo systemInfo; /*Global System Info variable, accessible in all the driver*/
 /** @}*/
 
-static struct gpio_desc *reset_gpiod; /*GPIO descriptor for the reset pin, NULL if not connected*/
+/* CRC8 table for polynomial 0x9B (MSB-first) */
+DECLARE_CRC8_TABLE(fts_crc8_table);
+
+static struct gpio_desc *
+	reset_gpiod; /*GPIO descriptor for the reset pin, NULL if not connected*/
 static int
 	system_reseted_up; /*flag checked during resume to understand if there was a system reset and restore the proper state*/
 static int
@@ -56,6 +61,10 @@ int initCore(struct fts_ts_info *info)
 {
 	int ret = OK;
 	logError(0, "%s %s: Initialization of the Core... \n", tag, __func__);
+
+	/* Initialize CRC8 table with polynomial 0x9B (MSB-first) */
+	crc8_populate_msb(fts_crc8_table, 0x9B);
+
 	ret |= openChannel(info->client);
 	ret |= resetErrorList();
 	ret |= initTestToDo();
@@ -1018,38 +1027,6 @@ int requestSyncFrame(u8 type)
 	return ret;
 }
 
-int calculateCRC8(u8 *u8_srcBuff, int size, u8 *crc)
-{
-	u8 u8_remainder;
-	u8 bit;
-	int i = 0;
-	u8_remainder = 0x00;
-
-	logError(0, "%s %s: Start CRC computing...\n", tag, __func__);
-	if (size != 0 && u8_srcBuff != NULL) {
-		for (i = 0; i < size; i++) {
-			u8_remainder ^= u8_srcBuff[i];
-			for (bit = 8; bit > 0; --bit) {
-				if (u8_remainder & (0x1 << 7)) {
-					u8_remainder =
-						(u8_remainder << 1) ^ 0x9B;
-				} else {
-					u8_remainder = (u8_remainder << 1);
-				}
-			}
-		}
-		*crc = u8_remainder;
-		logError(0, "%s %s: CRC value = %02X\n", tag, __func__, *crc);
-		return OK;
-	} else {
-		logError(
-			1,
-			"%s %s: Arguments passed not valid! Data pointer = NULL or size = 0 (%d) ERROR %08X\n",
-			tag, __func__, size, ERROR_OP_NOT_ALLOW);
-		return ERROR_OP_NOT_ALLOW;
-	}
-}
-
 int writeLockDownInfo(u8 *data, int size, u8 lock_id)
 {
 	int ret, i;
@@ -1085,15 +1062,7 @@ int writeLockDownInfo(u8 *data, int size, u8 lock_id)
 	fts_disableInterrupt();
 	for (i = 0; i < 3; i++) {
 		cmd_lockdown_prepare[1] = lock_id;
-		ret = calculateCRC8(data, size, &crc_data);
-		if (ret < OK) {
-			logError(
-				1,
-				"%s %s: Unable to compute data CRC.. ERROR %08X\n",
-				tag, __func__, ret);
-			ret = (ret | ERROR_LOCKDOWN_CODE);
-			continue;
-		}
+		crc_data = crc8(fts_crc8_table, data, size, 0);
 		logError(0, "%s %s: Get the data CRC value:%02X\n", tag,
 			 __func__, crc_data);
 		ret = fts_writeU8UX(LOCKDOWN_WRITE_CMD, BITS_16, ADDR_LOCKDOWN,
@@ -1113,15 +1082,7 @@ int writeLockDownInfo(u8 *data, int size, u8 lock_id)
 		cmd_lockdown_crc[0] = (u8)size;
 		cmd_lockdown_crc[1] = crc_data;
 		cmd_lockdown_crc[2] = lock_id;
-		ret = calculateCRC8(cmd_lockdown_crc, 3, &crc_head);
-		if (ret < OK) {
-			logError(
-				1,
-				"%s %s: Unable to compute head CRC.. ERROR %08X\n",
-				tag, __func__, ret);
-			ret = (ret | ERROR_LOCKDOWN_CODE);
-			continue;
-		}
+		crc_head = crc8(fts_crc8_table, cmd_lockdown_crc, 3, 0);
 		cmd_lockdown_crc[3] = crc_head;
 		logError(0, "%s %s: Get the header CRC value:%02X\n", tag,
 			 __func__, crc_head);
