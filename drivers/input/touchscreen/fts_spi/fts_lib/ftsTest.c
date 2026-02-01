@@ -503,7 +503,7 @@ int checkLimitsMinMax(short *data, int row, int column, int min, int max)
  * @param threshold threshold value allowed
  * @return OK if the difference is <= to threshold otherwise ERROR_TEST_CHECK_FAIL
  */
-int checkLimitsGap(short *data, int row, int column, int threshold)
+static int checkLimitsGap(short *data, int row, int column, int threshold)
 {
 	int i, j;
 	int min_node;
@@ -3426,7 +3426,7 @@ ERROR_LIMITS:
 	return ret;
 }
 
-int production_test_ss_hover_raw(const char *path_limits, int stop_on_fail,
+static int production_test_ss_hover_raw(const char *path_limits, int stop_on_fail,
 				 TestToDo *todo)
 {
 	int ret;
@@ -4353,8 +4353,7 @@ ERROR_LIMITS:
 	return ret;
 }
 
-int production_test_ss_hover_ix(const char *path_limits, int stop_on_fail,
-				TestToDo *todo)
+static int production_test_ss_hover_ix(const char *path_limits, int stop_on_fail, TestToDo *todo)
 {
 	TotSelfSenseData ssHoverCompData;
 	int ret;

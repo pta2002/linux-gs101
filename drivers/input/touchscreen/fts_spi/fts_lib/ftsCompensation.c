@@ -438,7 +438,7 @@ int readSelfSenseCompensationData(u8 type, SelfSenseData *data)
 * @param global pointer to a variable which will contain the TOT MS initialization data
 * @return OK if success or an error code which specify the type of error encountered
 */
-int readTotMutualSenseGlobalData(u64 *address, TotMutualSenseData *global)
+static int readTotMutualSenseGlobalData(u64 *address, TotMutualSenseData *global)
 {
 	int ret;
 	u8 data[COMP_DATA_GLOBAL];
@@ -470,7 +470,7 @@ int readTotMutualSenseGlobalData(u64 *address, TotMutualSenseData *global)
 * @param node pointer to MutualSenseData variable which will contain the TOT MS initialization data
 * @return OK if success or an error code which specify the type of error encountered
 */
-int readTotMutualSenseNodeData(u64 address, TotMutualSenseData *node)
+static int readTotMutualSenseNodeData(u64 address, TotMutualSenseData *node)
 {
 	int ret, i;
 	int size = node->header.force_node * node->header.sense_node;

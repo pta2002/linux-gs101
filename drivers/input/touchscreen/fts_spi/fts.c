@@ -130,7 +130,7 @@ extern int power_supply_is_system_supplied(void);
 * Release all the touches in the linux input subsystem
 * @param info pointer to fts_ts_info which contains info about the device and its hw setup
 */
-void release_all_touches(struct fts_ts_info *info)
+static void release_all_touches(struct fts_ts_info *info)
 {
 	unsigned int type = MT_TOOL_FINGER;
 	int i;
@@ -1619,18 +1619,7 @@ static inline int32_t thp_crc32_check(int s32_message[], int s32_len)
 
 static const char *fts_get_config(struct fts_ts_info *info);
 
-int fts_enable_touch_delta(bool en)
-{
-	if (en)
-		fts_info->enable_touch_delta = true;
-	else
-		fts_info->enable_touch_delta = false;
-	logError(1, "%s %s enable touch delta:%d\n", tag, __func__,
-		 fts_info->enable_touch_delta);
-	return 0;
-}
-
-int fts_hover_auto_tune(struct fts_ts_info *info)
+static int fts_hover_auto_tune(struct fts_ts_info *info)
 {
 	int res = OK;
 	u8 sett[2];
@@ -2321,21 +2310,6 @@ DEVICE_ATTR(secure_touch, (S_IRUGO | S_IWUSR | S_IWGRP), fts_secure_touch_show,
  * The most important events are the one related to touch informations, status update or user report.
  * @{
  */
-
-/**
- * Report to the linux input system the pressure and release of a button handling concurrency
- * @param info pointer to fts_ts_info which contains info about the device and its hw setup
- * @param key_code	button value
- */
-void fts_input_report_key(struct fts_ts_info *info, int key_code)
-{
-	mutex_lock(&info->input_report_mutex);
-	input_report_key(info->input_dev, key_code, 1);
-	input_sync(info->input_dev);
-	input_report_key(info->input_dev, key_code, 0);
-	input_sync(info->input_dev);
-	mutex_unlock(&info->input_report_mutex);
-}
 
 /**
 * Event Handler for no events (EVT_ID_NOEVENT)
@@ -3080,7 +3054,8 @@ const char *fts_get_limit(struct fts_ts_info *info)
 *	The function perform a fw update of the IC in case of crc error or a new fw version and then understand if the IC need to be re-initialized again.
 *	@return  OK if success or an error code which specify the type of error encountered
 */
-int fts_fw_update(struct fts_ts_info *info, const char *fw_name, int force)
+static int fts_fw_update(struct fts_ts_info *info, const char *fw_name,
+			 int force)
 {
 	u8 error_to_search[4] = { EVT_TYPE_ERROR_CRC_CX_HEAD,
 				  EVT_TYPE_ERROR_CRC_CX,
