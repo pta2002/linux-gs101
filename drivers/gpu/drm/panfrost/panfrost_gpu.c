@@ -240,6 +240,8 @@ static const struct panfrost_model gpu_models[] = {
 	/* MediaTek MT8188 Mali-G57 MC3 */
 	GPU_MODEL(g57, 0x9093,
 		GPU_REV(g57, 0, 0)),
+
+	GPU_MODEL(g78, 0x9002, GPU_REV(g78, 0, 1)),
 };
 
 static void panfrost_gpu_init_features(struct panfrost_device *pfdev)
