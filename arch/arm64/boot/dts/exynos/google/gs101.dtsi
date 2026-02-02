@@ -1495,6 +1495,15 @@
 			status = "disabled";
 		};
 
+		dsi: dsi@1c2c0000 {
+			compatible = "google,gs101-mipi-dsi";
+			reg = <0x1c2c0000 0x10000>;
+			interrupts = <GIC_SPI 347 IRQ_TYPE_LEVEL_HIGH 0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "disabled";
+		};
+
 		gpu: gpu@1c500000 {
 			compatible = "google,gs101-mali", "arm,mali-valhall-jm";
 			/* TODO: On downstream, it's reg = <0x0 0x1c500000 0x5000>; */

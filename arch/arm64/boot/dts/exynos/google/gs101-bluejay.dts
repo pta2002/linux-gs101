@@ -19,12 +19,31 @@
 	status = "okay";
 };
 
+&dsi {
+	status = "okay";
+};
+
+&panel0 {
+	status = "okay";
+	compatible = "samsung,s6e3fc3-6a";
+	width-mm = <64>;
+	height-mm = <142>;
+	reset-gpios = <&gpp24 1 GPIO_ACTIVE_HIGH>;
+};
+
 &framebuffer0 {
 	width = <1080>;
 	height = <2400>;
 	stride = <(1080 * 4)>;
 	format = "a8r8g8b8";
 	status = "okay";
+
+	panel = <&panel0>;
+};
+
+&m_ldo22_reg {
+	regulator-min-microvolt = <3025000>;
+	regulator-max-microvolt = <3025000>;
 };
 
 &spitouch {

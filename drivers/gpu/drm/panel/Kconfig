@@ -879,6 +879,17 @@ config DRM_PANEL_SAMSUNG_SOFEF00
 
 	  The panels are 2280x1080@60Hz and 2340x1080@60Hz respectively
 
+config DRM_PANEL_SAMSUNG_S6E3FC3_6A
+	tristate "Samsung S6E3FC3-6A DSI video mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y or M here if you want to enable support for the Samsung
+	  S6E3FC3-6A AMOLED panel found in the Google Pixel 6a smartphone.
+
+	  The panel is 1080x2400@60Hz with DSC compression support.
+
 config DRM_PANEL_SEIKO_43WVF1G
 	tristate "Seiko 43WVF1G panel"
 	depends on OF

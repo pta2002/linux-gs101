@@ -378,7 +378,7 @@
 				regulator-always-on;
 			};
 
-			ldo22m {
+			m_ldo22_reg: ldo22m {
 				/* display */
 				regulator-name = "vci_disp";
 			};
@@ -1082,5 +1082,18 @@
 			/* SET SPI CS CONTROL TO AUTOMATIC */
 			samsung,spi-chip-select-mode = <1>;
 		};
+	};
+};
+
+&dsi {
+	status = "okay";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	panel0: panel@0 {
+		compatible = "samsung,s6e3fc3-6a";
+		reg = <0>;
+		vci-supply = <&m_ldo22_reg>;
+		status = "disabled";
 	};
 };
