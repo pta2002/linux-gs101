@@ -167,6 +167,17 @@ static void panfrost_gpu_init_quirks(struct panfrost_device *pfdev)
 	if (quirks)
 		gpu_write(pfdev, GPU_JM_CONFIG, quirks);
 
+	/* Allow memory configuration disparity on ACE coherent systems.
+	 * The GPU and CPU may have different views of memory cacheability,
+	 * and this bit prevents the L2 from flagging that as an error.
+	 */
+	if (pfdev->features.coherency_features & COHERENCY_ACE) {
+		u32 l2_mmu_config = gpu_read(pfdev, GPU_L2_MMU_CONFIG);
+
+		l2_mmu_config |= L2_MMU_CONFIG_ALLOW_SNOOP_DISPARITY;
+		gpu_write(pfdev, GPU_L2_MMU_CONFIG, l2_mmu_config);
+	}
+
 	/* Here goes platform specific quirks */
 	if (pfdev->comp->vendor_quirk)
 		pfdev->comp->vendor_quirk(pfdev);

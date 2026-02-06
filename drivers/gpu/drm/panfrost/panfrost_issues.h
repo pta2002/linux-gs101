@@ -267,7 +267,8 @@ enum panfrost_hw_issue {
 
 #define hw_issues_g78 (\
 	BIT_ULL(HW_ISSUE_TTRX_2968_TTRX_3162) | \
-	BIT_ULL(HW_ISSUE_TTRX_3076))
+	BIT_ULL(HW_ISSUE_TTRX_3076) | \
+	BIT_ULL(HW_ISSUE_TTRX_3485))
 
 #define hw_issues_g78_r0p1 0
 
